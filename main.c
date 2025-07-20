@@ -157,3 +157,80 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     return 0;
 }
+
+
+
+/*
+
+#include <windows.h>
+#include <stdio.h>  // Optional: for debugging input
+
+// Function prototypes
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void Update();
+void Render();
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Register window class
+    const char CLASS_NAME[] = "GameWindowClass";
+    WNDCLASS wc = { };
+    wc.lpfnWndProc   = WindowProc;
+    wc.hInstance     = hInstance;
+    wc.lpszClassName = CLASS_NAME;
+    RegisterClass(&wc);
+
+    // Create window
+    HWND hwnd = CreateWindowEx(0, CLASS_NAME, "My Game Engine",
+        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
+        NULL, NULL, hInstance, NULL);
+
+    if (hwnd == NULL) return 0;
+    ShowWindow(hwnd, nCmdShow);
+
+    // Main game loop
+    MSG msg = { };
+    while (msg.message != WM_QUIT) {
+        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        } else {
+            Update();  // Game logic
+            Render();  // Drawing
+        }
+    }
+
+    return (int) msg.wParam;
+}
+
+// Window procedure
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_DESTROY) {
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+// Game logic update function
+void Update() {
+    // Example: check if arrow keys or ESC are pressed
+    if (GetAsyncKeyState(VK_UP) & 0x8000) {
+        // Move character up
+        printf("Up arrow pressed\n");
+    }
+    if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
+        // Move character down
+        printf("Down arrow pressed\n");
+    }
+    if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
+        // Exit game
+        PostQuitMessage(0);
+    }
+}
+
+// Render function
+void Render() {
+    // TODO: Add rendering logic here
+}
+
+*/
