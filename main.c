@@ -4,19 +4,18 @@
 #include <wchar.h>
 
 #define TIMER_ID 1
-#define TIMER_INTERVAL 1000
+#define TIMER_INTERVAL 100
+
+#define PIXEL_WIDTH 320
+#define PIXEL_HEIGHT 256
+#define PIXEL_SCALE 3
 
 // Add this global buffer for the bitmap (24-bit RGB)
-uint8_t framebuffer[0xffff * 3];
-
-
-
+uint8_t framebuffer[PIXEL_WIDTH * PIXEL_HEIGHT * 3];
 
 int RunGameLogic() {
     return 0;
 }
-
-
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -39,6 +38,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
+            HDC memDC = CreateCompatibleDC(hdc);
+
+            HBITMAP hBitmap = CreateCompatibleBitmap(hdc, PIXEL_WIDTH, PIXEL_HEIGHT);
+            SelectObject(memDC, hBitmap);
 
             // Get the client rectangle
             RECT clientRect;
@@ -63,8 +66,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             wsprintf(buffer, TEXT("%s 0x%04X"), label, tempnumber);
             TextOut(hdc, 8, 8, buffer, lstrlen(buffer));
 
-            // Fill framebuffer from Z80 memory (grayscale)
-            for (int address = 0; address < 0xffff; address++) {
+            // Fill framebuffer
+            for (int index = 0; index < PIXEL_WIDTH * PIXEL_HEIGHT; index++) {
                 uint8_t val = rand() % 0xff;
                 
                 // Extract raw values
@@ -77,7 +80,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 uint8_t green = (green_raw * 255) / 7;
                 uint8_t blue  = (blue_raw  * 255) / 3;            
                 
-                int idx = address * 3;
+                int idx = index * 3;
                 framebuffer[idx + 0] = blue;
                 framebuffer[idx + 1] = green;
                 framebuffer[idx + 2] = red;
@@ -86,23 +89,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             // Prepare BITMAPINFO
             BITMAPINFO bmi = {0};
             bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = 256;
-            bmi.bmiHeader.biHeight = -256; // negative for top-down
+            bmi.bmiHeader.biWidth = PIXEL_WIDTH;
+            bmi.bmiHeader.biHeight = -PIXEL_HEIGHT; // negative for top-down
             bmi.bmiHeader.biPlanes = 1;
             bmi.bmiHeader.biBitCount = 24;
             bmi.bmiHeader.biCompression = BI_RGB;
             
-            // Blit to window
+            // Blit to memDC
             SetDIBitsToDevice(
-                hdc,
-                64, 64, 256, 256, // dest x, y, width, height
-                0, 0, 0, 256,   // src x, y, start scan, num scans
+                memDC,
+                0, 0, PIXEL_WIDTH, PIXEL_HEIGHT,
+                0, 0, 0, PIXEL_HEIGHT,
                 framebuffer,
                 &bmi,
                 DIB_RGB_COLORS
             );
-            
-            
+
+            // Blit to screen scaled
+            StretchBlt(hdc, 0, 0, PIXEL_WIDTH*PIXEL_SCALE, PIXEL_HEIGHT*PIXEL_SCALE, memDC, 0, 0, PIXEL_WIDTH, PIXEL_HEIGHT, SRCCOPY);
+
             EndPaint(hwnd, &ps);
             return 0;            
         }
@@ -136,7 +141,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         CLASS_NAME,
         L"Pixel Drawing Window",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 500, 400,
+        CW_USEDEFAULT, CW_USEDEFAULT, PIXEL_WIDTH * PIXEL_SCALE, PIXEL_HEIGHT * PIXEL_SCALE,
         NULL, NULL, hInstance, NULL
     );
     
