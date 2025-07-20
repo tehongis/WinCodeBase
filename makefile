@@ -1,11 +1,16 @@
-CC=cl
-CFLAGS=/nologo /W3 /EHsc /DUNICODE /D_UNICODE
-LDFLAGS=/link user32.lib gdi32.lib
+# Compiler and flags
+CC = cl
+CFLAGS = /nologo /EHsc /Zi /MD
+LIBS = d3d11.lib d3dcompiler.lib dxguid.lib user32.lib gdi32.lib
 
-all: Z80me.exe
+# Source and output
+SRC = main.c
+OUT = WinCodeBase.exe
 
-Z80me.exe: main.c 
-    $(CC) $(CFLAGS) main.c /FeWinCodeBase.exe $(LDFLAGS)
+all: $(OUT)
+
+$(OUT): $(SRC)
+    $(CC) $(SRC) /Fe$(OUT) $(CFLAGS) $(LIBS)
 
 clean:
-    del WinCodeBase.exe main.obj
+    del *.obj *.exe *.pdb

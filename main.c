@@ -1,208 +1,65 @@
 #include <windows.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <wchar.h>
+#include <d3d11.h>
+#include <d3dcompiler.h>
+#include <stdio.h>
 
-#define TIMER_ID 1
-#define TIMER_INTERVAL 100
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "d3dcompiler.lib")
+#pragma comment(lib, "dxguid.lib")
 
-#define PIXEL_WIDTH 320
-#define PIXEL_HEIGHT 256
-#define PIXEL_SCALE 3
-
-// Add this global buffer for the bitmap (24-bit RGB)
-uint8_t framebuffer[PIXEL_WIDTH * PIXEL_HEIGHT * 3];
-
-int RunGameLogic() {
-    return 0;
-}
-
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {
-        
-        case WM_CREATE: {
-            // Start a timer when the window is created
-            SetTimer(hwnd, TIMER_ID, TIMER_INTERVAL, NULL);
-            return 0;            
-        }
-        
-        case WM_TIMER: {
-            if (wParam == TIMER_ID) {
-                RunGameLogic();
-                InvalidateRect(hwnd, NULL, FALSE); // Request repaint
-            }
-            return 0;
-        }
-        
-        case WM_PAINT: {
-            
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            HDC memDC = CreateCompatibleDC(hdc);
-
-            HBITMAP hBitmap = CreateCompatibleBitmap(hdc, PIXEL_WIDTH, PIXEL_HEIGHT);
-            SelectObject(memDC, hBitmap);
-
-            // Get the client rectangle
-            RECT clientRect;
-            GetClientRect(hwnd, &clientRect);
-            
-            // Fill the background with a solid color (e.g., white)
-            HBRUSH hBrush = CreateSolidBrush(RGB(155, 155, 155)); // Gray
-            FillRect(hdc, &clientRect, hBrush);
-            DeleteObject(hBrush);
-
-            // Set text color and background mode
-            SetTextColor(hdc, RGB(0, 0, 0));
-            SetBkMode(hdc, TRANSPARENT);
-            
-            // printf("PC: 0x%04X\n", cpu.PC);
-            LPTSTR buffer[100];
-            LPTSTR* label = TEXT("PC: ");
-            // Format the string with a hexadecimal number
-
-            int tempnumber = 200;
-
-            wsprintf(buffer, TEXT("%s 0x%04X"), label, tempnumber);
-            TextOut(hdc, 8, 8, buffer, lstrlen(buffer));
-
-            // Fill framebuffer
-            for (int index = 0; index < PIXEL_WIDTH * PIXEL_HEIGHT; index++) {
-                uint8_t val = rand() % 0xff;
-                
-                // Extract raw values
-                uint8_t red_raw   =  val       & 0b00000111;        // bits 0–2
-                uint8_t green_raw = (val >> 3) & 0b00000111;        // bits 3–5
-                uint8_t blue_raw  = (val >> 6) & 0b00000011;        // bits 6–7
-                
-                // Scale to 0–255 range (optional)
-                uint8_t red   = (red_raw   * 255) / 7;
-                uint8_t green = (green_raw * 255) / 7;
-                uint8_t blue  = (blue_raw  * 255) / 3;            
-                
-                int idx = index * 3;
-                framebuffer[idx + 0] = blue;
-                framebuffer[idx + 1] = green;
-                framebuffer[idx + 2] = red;
-            }
-            
-            // Prepare BITMAPINFO
-            BITMAPINFO bmi = {0};
-            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = PIXEL_WIDTH;
-            bmi.bmiHeader.biHeight = -PIXEL_HEIGHT; // negative for top-down
-            bmi.bmiHeader.biPlanes = 1;
-            bmi.bmiHeader.biBitCount = 24;
-            bmi.bmiHeader.biCompression = BI_RGB;
-            
-            // Blit to memDC
-            SetDIBitsToDevice(
-                memDC,
-                0, 0, PIXEL_WIDTH, PIXEL_HEIGHT,
-                0, 0, 0, PIXEL_HEIGHT,
-                framebuffer,
-                &bmi,
-                DIB_RGB_COLORS
-            );
-
-            // Blit to screen scaled
-            StretchBlt(hdc, 0, 0, PIXEL_WIDTH*PIXEL_SCALE, PIXEL_HEIGHT*PIXEL_SCALE, memDC, 0, 0, PIXEL_WIDTH, PIXEL_HEIGHT, SRCCOPY);
-
-            EndPaint(hwnd, &ps);
-            return 0;            
-        }
-        
-        case WM_DESTROY: {
-            KillTimer(hwnd, TIMER_ID);
-            PostQuitMessage(0);
-            return 0;
-        }
-    }
-    return DefWindowProc(hwnd, uMsg, wParam, lParam);
-    
-}
-
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-
-    // Initialize random seed using the current time
-    srand((unsigned) time(NULL));
-
-    const char CLASS_NAME[] = "SampleWindowClass";
-    
-    WNDCLASS wc = { 0 };
-    wc.lpfnWndProc = WindowProc;
-    wc.hInstance = hInstance;
-    wc.lpszClassName = CLASS_NAME;
-    
-    RegisterClass(&wc);
-    
-    HWND hwnd = CreateWindowEx(
-        0,
-        CLASS_NAME,
-        L"Pixel Drawing Window",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, PIXEL_WIDTH * PIXEL_SCALE, PIXEL_HEIGHT * PIXEL_SCALE,
-        NULL, NULL, hInstance, NULL
-    );
-    
-    if (hwnd == NULL) return 0;
-    
-    ShowWindow(hwnd, nCmdShow);
-    
-    MSG msg = { 0 };
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-    
-    return 0;
-}
-
-
-
-/*
-
-#include <windows.h>
-#include <stdio.h>  // Optional: for debugging input
+// Globals
+IDXGISwapChain* swapChain;
+ID3D11Device* device;
+ID3D11DeviceContext* deviceContext;
+ID3D11RenderTargetView* renderTargetView;
+ID3D11VertexShader* vertexShader;
+ID3D11PixelShader* pixelShader;
 
 // Function prototypes
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void InitD3D(HWND hwnd);
+void LoadShaders();
+void CleanD3D();
 void Update();
 void Render();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // Register window class
+    WNDCLASS wc;
+    HWND hwnd;
+    MSG msg;
+
     const char CLASS_NAME[] = "GameWindowClass";
-    WNDCLASS wc = { };
-    wc.lpfnWndProc   = WindowProc;
-    wc.hInstance     = hInstance;
+
+    ZeroMemory(&wc, sizeof(wc));
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
     RegisterClass(&wc);
 
-    // Create window
-    HWND hwnd = CreateWindowEx(0, CLASS_NAME, "My Game Engine",
-        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
-        NULL, NULL, hInstance, NULL);
-
-    if (hwnd == NULL) return 0;
+    hwnd = CreateWindowEx(0, CLASS_NAME, "Game Engine DX11", WS_OVERLAPPEDWINDOW,
+                          CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
+                          NULL, NULL, hInstance, NULL);
+    if (!hwnd) return 0;
     ShowWindow(hwnd, nCmdShow);
 
-    // Main game loop
-    MSG msg = { };
+    InitD3D(hwnd);
+    LoadShaders();
+
+    ZeroMemory(&msg, sizeof(MSG));
     while (msg.message != WM_QUIT) {
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         } else {
-            Update();  // Game logic
-            Render();  // Drawing
+            Update();
+            Render();
         }
     }
 
+    CleanD3D();
     return (int) msg.wParam;
 }
 
-// Window procedure
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_DESTROY) {
         PostQuitMessage(0);
@@ -211,26 +68,99 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-// Game logic update function
+void InitD3D(HWND hwnd) {
+    DXGI_SWAP_CHAIN_DESC scd;
+    ID3D11Texture2D* backBuffer;
+    D3D11_VIEWPORT viewport;
+
+    ZeroMemory(&scd, sizeof(scd));
+    scd.BufferCount = 1;
+    scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    scd.BufferDesc.Width = 800;
+    scd.BufferDesc.Height = 600;
+    scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    scd.OutputWindow = hwnd;
+    scd.SampleDesc.Count = 1;
+    scd.Windowed = TRUE;
+    scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+    D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0,
+                                  NULL, 0, D3D11_SDK_VERSION,
+                                  &scd, &swapChain, &device, NULL, &deviceContext);
+
+    swapChain->lpVtbl->GetBuffer(swapChain, 0, &IID_ID3D11Texture2D, (void**)&backBuffer);
+    device->lpVtbl->CreateRenderTargetView(device, (ID3D11Resource*)backBuffer, NULL, &renderTargetView);
+    backBuffer->lpVtbl->Release(backBuffer);
+
+    deviceContext->lpVtbl->OMSetRenderTargets(deviceContext, 1, &renderTargetView, NULL);
+
+    ZeroMemory(&viewport, sizeof(viewport));
+    viewport.Width = 800;
+    viewport.Height = 600;
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+    deviceContext->lpVtbl->RSSetViewports(deviceContext, 1, &viewport);
+}
+
+void LoadShaders() {
+    ID3DBlob* vsBlob = NULL;
+    ID3DBlob* psBlob = NULL;
+    ID3DBlob* errorBlob = NULL;
+    HRESULT hr;
+
+    hr = D3DCompileFromFile("shader.hlsl", NULL, NULL, "main", "vs_5_0", 0, 0, &vsBlob, &errorBlob);
+    if (FAILED(hr)) {
+        if (errorBlob) {
+            printf("Vertex Shader Error: %s\n", (char*)errorBlob->lpVtbl->GetBufferPointer(errorBlob));
+            errorBlob->lpVtbl->Release(errorBlob);
+        }
+        return;
+    }
+
+    hr = D3DCompileFromFile("shader.hlsl", NULL, NULL, "ps_main", "ps_5_0", 0, 0, &psBlob, &errorBlob);
+    if (FAILED(hr)) {
+        if (errorBlob) {
+            printf("Pixel Shader Error: %s\n", (char*)errorBlob->lpVtbl->GetBufferPointer(errorBlob));
+            errorBlob->lpVtbl->Release(errorBlob);
+        }
+        return;
+    }
+
+    device->lpVtbl->CreateVertexShader(device, vsBlob->lpVtbl->GetBufferPointer(vsBlob),
+                                       vsBlob->lpVtbl->GetBufferSize(vsBlob), NULL, &vertexShader);
+    device->lpVtbl->CreatePixelShader(device, psBlob->lpVtbl->GetBufferPointer(psBlob),
+                                      psBlob->lpVtbl->GetBufferSize(psBlob), NULL, &pixelShader);
+
+    deviceContext->lpVtbl->VSSetShader(deviceContext, vertexShader, NULL, 0);
+    deviceContext->lpVtbl->PSSetShader(deviceContext, pixelShader, NULL, 0);
+
+    vsBlob->lpVtbl->Release(vsBlob);
+    psBlob->lpVtbl->Release(psBlob);
+}
+
 void Update() {
-    // Example: check if arrow keys or ESC are pressed
     if (GetAsyncKeyState(VK_UP) & 0x8000) {
-        // Move character up
-        printf("Up arrow pressed\n");
+        printf("Up pressed\n");
     }
     if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
-        // Move character down
-        printf("Down arrow pressed\n");
+        printf("Down pressed\n");
     }
     if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
-        // Exit game
         PostQuitMessage(0);
     }
 }
 
-// Render function
 void Render() {
-    // TODO: Add rendering logic here
+    float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
+    deviceContext->lpVtbl->ClearRenderTargetView(deviceContext, renderTargetView, clearColor);
+    swapChain->lpVtbl->Present(swapChain, 1, 0);
 }
 
-*/
+void CleanD3D() {
+    if (vertexShader) vertexShader->lpVtbl->Release(vertexShader);
+    if (pixelShader) pixelShader->lpVtbl->Release(pixelShader);
+    if (renderTargetView) renderTargetView->lpVtbl->Release(renderTargetView);
+    if (swapChain) swapChain->lpVtbl->Release(swapChain);
+    if (deviceContext) deviceContext->lpVtbl->Release(deviceContext);
+    if (device) device->lpVtbl->Release(device);
+}
