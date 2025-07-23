@@ -14,11 +14,20 @@ ID3D11DeviceContext* deviceContext;
 ID3D11RenderTargetView* renderTargetView;
 ID3D11VertexShader* vertexShader;
 ID3D11PixelShader* pixelShader;
+ID3D11Buffer* quadVertexBuffer = NULL;
+ID3D11InputLayout* inputLayout = NULL;
+
+// Add this struct at the top:
+typedef struct {
+    float position[3];
+    float texcoord[2];
+} Vertex;
 
 // Function prototypes
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void InitD3D(HWND hwnd);
 void LoadShaders();
+void CreateFullscreenQuad();
 void CleanD3D();
 void Update();
 void Render();
@@ -136,6 +145,38 @@ void LoadShaders() {
 
     vsBlob->lpVtbl->Release(vsBlob);
     psBlob->lpVtbl->Release(psBlob);
+
+    CreateFullscreenQuad();
+}
+
+void CreateFullscreenQuad() {
+    Vertex vertices[] = {
+        { {-1.0f,  1.0f, 0.0f}, {0.0f, 0.0f} },
+        { { 1.0f,  1.0f, 0.0f}, {1.0f, 0.0f} },
+        { {-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f} },
+        { { 1.0f, -1.0f, 0.0f}, {1.0f, 1.0f} },
+    };
+
+    D3D11_BUFFER_DESC bd = {0};
+    bd.Usage = D3D11_USAGE_DEFAULT;
+    bd.ByteWidth = sizeof(vertices);
+    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+
+    D3D11_SUBRESOURCE_DATA initData = {0};
+    initData.pSysMem = vertices;
+
+    device->lpVtbl->CreateBuffer(device, &bd, &initData, &quadVertexBuffer);
+
+    D3D11_INPUT_ELEMENT_DESC layout[] = {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+
+    ID3DBlob* vsBlob = NULL;
+    D3DCompileFromFile("shader.hlsl", NULL, NULL, "main", "vs_5_0", 0, 0, &vsBlob, NULL);
+    device->lpVtbl->CreateInputLayout(device, layout, 2, vsBlob->lpVtbl->GetBufferPointer(vsBlob),
+        vsBlob->lpVtbl->GetBufferSize(vsBlob), &inputLayout);
+    vsBlob->lpVtbl->Release(vsBlob);
 }
 
 void Update() {
@@ -153,6 +194,15 @@ void Update() {
 void Render() {
     float clearColor[4] = { 0.1f, 0.1f, 0.3f, 1.0f };
     deviceContext->lpVtbl->ClearRenderTargetView(deviceContext, renderTargetView, clearColor);
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    deviceContext->lpVtbl->IASetInputLayout(deviceContext, inputLayout);
+    deviceContext->lpVtbl->IASetVertexBuffers(deviceContext, 0, 1, &quadVertexBuffer, &stride, &offset);
+    deviceContext->lpVtbl->IASetPrimitiveTopology(deviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+    deviceContext->lpVtbl->Draw(deviceContext, 4, 0);
+
     swapChain->lpVtbl->Present(swapChain, 1, 0);
 }
 
@@ -163,4 +213,6 @@ void CleanD3D() {
     if (swapChain) swapChain->lpVtbl->Release(swapChain);
     if (deviceContext) deviceContext->lpVtbl->Release(deviceContext);
     if (device) device->lpVtbl->Release(device);
+    if (quadVertexBuffer) quadVertexBuffer->lpVtbl->Release(quadVertexBuffer);
+    if (inputLayout) inputLayout->lpVtbl->Release(inputLayout);
 }
