@@ -17,11 +17,53 @@ ID3D11PixelShader* pixelShader;
 ID3D11Buffer* quadVertexBuffer = NULL;
 ID3D11InputLayout* inputLayout = NULL;
 
+ID3D11Texture2D* bgTexture = NULL;
+ID3D11ShaderResourceView* bgSRV = NULL;
+ID3D11SamplerState* samplerState = NULL;
+
 // Add this struct at the top:
 typedef struct {
     float position[3];
     float texcoord[2];
 } Vertex;
+
+// Example: create a simple checkerboard pattern
+unsigned char checkerboard[800 * 600 * 4];
+void GenerateCheckerboard() {
+    for (int y = 0; y < 600; ++y) {
+        for (int x = 0; x < 800; ++x) {
+            int i = (y * 800 + x) * 4;
+            int c = ((x / 32) % 2) ^ ((y / 32) % 2);
+            checkerboard[i + 0] = c ? 255 : 0;   // R
+            checkerboard[i + 1] = c ? 255 : 0;   // G
+            checkerboard[i + 2] = c ? 255 : 0;   // B
+            checkerboard[i + 3] = 255;           // A
+        }
+    }
+}
+
+// Create a texture from a byte array
+void CreateBackgroundTexture(unsigned char* pixels, int width, int height) {
+    if (bgTexture) { bgTexture->lpVtbl->Release(bgTexture); bgTexture = NULL; }
+    if (bgSRV) { bgSRV->lpVtbl->Release(bgSRV); bgSRV = NULL; }
+
+    D3D11_TEXTURE2D_DESC desc = {0};
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA initData = {0};
+    initData.pSysMem = pixels;
+    initData.SysMemPitch = width * 4;
+
+    device->lpVtbl->CreateTexture2D(device, &desc, &initData, &bgTexture);
+    device->lpVtbl->CreateShaderResourceView(device, (ID3D11Resource*)bgTexture, NULL, &bgSRV);
+}
 
 // Function prototypes
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -109,6 +151,18 @@ void InitD3D(HWND hwnd) {
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
     deviceContext->lpVtbl->RSSetViewports(deviceContext, 1, &viewport);
+
+    // Add after viewport setup:
+    D3D11_SAMPLER_DESC sampDesc = {0};
+    sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    device->lpVtbl->CreateSamplerState(device, &sampDesc, &samplerState);
+
+    // Example: generate and upload checkerboard background
+    GenerateCheckerboard();
+    CreateBackgroundTexture(checkerboard, 800, 600);
 }
 
 void LoadShaders() {
@@ -117,7 +171,7 @@ void LoadShaders() {
     ID3DBlob* errorBlob = NULL;
     HRESULT hr;
 
-    hr = D3DCompileFromFile("shader.hlsl", NULL, NULL, "main", "vs_5_0", 0, 0, &vsBlob, &errorBlob);
+    hr = D3DCompileFromFile(L"shader.hlsl", NULL, NULL, "main", "vs_5_0", 0, 0, &vsBlob, &errorBlob);
     if (FAILED(hr)) {
         if (errorBlob) {
             printf("Vertex Shader Error: %s\n", (char*)errorBlob->lpVtbl->GetBufferPointer(errorBlob));
@@ -126,14 +180,6 @@ void LoadShaders() {
         return;
     }
 
-    hr = D3DCompileFromFile("shader.hlsl", NULL, NULL, "ps_main", "ps_5_0", 0, 0, &psBlob, &errorBlob);
-    if (FAILED(hr)) {
-        if (errorBlob) {
-            printf("Pixel Shader Error: %s\n", (char*)errorBlob->lpVtbl->GetBufferPointer(errorBlob));
-            errorBlob->lpVtbl->Release(errorBlob);
-        }
-        return;
-    }
 
     device->lpVtbl->CreateVertexShader(device, vsBlob->lpVtbl->GetBufferPointer(vsBlob),
                                        vsBlob->lpVtbl->GetBufferSize(vsBlob), NULL, &vertexShader);
@@ -172,11 +218,6 @@ void CreateFullscreenQuad() {
         { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
 
-    ID3DBlob* vsBlob = NULL;
-    D3DCompileFromFile("shader.hlsl", NULL, NULL, "main", "vs_5_0", 0, 0, &vsBlob, NULL);
-    device->lpVtbl->CreateInputLayout(device, layout, 2, vsBlob->lpVtbl->GetBufferPointer(vsBlob),
-        vsBlob->lpVtbl->GetBufferSize(vsBlob), &inputLayout);
-    vsBlob->lpVtbl->Release(vsBlob);
 }
 
 void Update() {
@@ -201,6 +242,10 @@ void Render() {
     deviceContext->lpVtbl->IASetVertexBuffers(deviceContext, 0, 1, &quadVertexBuffer, &stride, &offset);
     deviceContext->lpVtbl->IASetPrimitiveTopology(deviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
+    // Bind background texture and sampler
+    deviceContext->lpVtbl->PSSetShaderResources(deviceContext, 0, 1, &bgSRV);
+    deviceContext->lpVtbl->PSSetSamplers(deviceContext, 0, 1, &samplerState);
+
     deviceContext->lpVtbl->Draw(deviceContext, 4, 0);
 
     swapChain->lpVtbl->Present(swapChain, 1, 0);
@@ -215,4 +260,7 @@ void CleanD3D() {
     if (device) device->lpVtbl->Release(device);
     if (quadVertexBuffer) quadVertexBuffer->lpVtbl->Release(quadVertexBuffer);
     if (inputLayout) inputLayout->lpVtbl->Release(inputLayout);
+    if (bgTexture) bgTexture->lpVtbl->Release(bgTexture);
+    if (bgSRV) bgSRV->lpVtbl->Release(bgSRV);
+    if (samplerState) samplerState->lpVtbl->Release(samplerState);
 }

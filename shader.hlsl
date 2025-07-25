@@ -22,7 +22,9 @@ VS_OUTPUT main(VS_INPUT input) {
 }
 
 // Pixel Shader
+Texture2D bgTex : register(t0);
+SamplerState samLinear : register(s0);
+
 float4 ps_main(VS_OUTPUT input) : SV_TARGET {
-    // Example: gradient based on texcoord
-    return float4(input.tex.x, input.tex.y, 0.5f, 1.0f);
+    return bgTex.Sample(samLinear, input.tex);
 }
